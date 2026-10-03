@@ -36,6 +36,22 @@ _Avoid_: Castle, tower, dungeon
 A single generated underground level made of rooms, corridors, doors, traps, monsters, treasure, stairs, and fog of war.
 _Avoid_: Map, level, board
 
+**Tile**:
+A single addressable cell on a Dungeon Floor. Tiles can be unseen, explored, visible, inspected, entered, opened, or targeted depending on their contents.
+_Avoid_: Square, cell, pixel
+
+**Visible**:
+The fog-of-war state for a Tile the Adventurer can currently see and act upon.
+_Avoid_: Lit, active, revealed
+
+**Explored**:
+The fog-of-war state for a Tile the Adventurer has seen before but cannot currently see.
+_Avoid_: Remembered, mapped, discovered
+
+**Unseen**:
+The fog-of-war state for a Tile the Adventurer has not yet observed.
+_Avoid_: Hidden, unknown, blacked out
+
 **Turn**:
 The atomic unit of dungeon time. Adventurer actions and monster responses advance through turns.
 _Avoid_: Tick, frame, step
@@ -79,6 +95,10 @@ _Avoid_: Freeze, snare
 **Supply**:
 A mundane consumable or preparation item bought in Town and carried into The Keep.
 _Avoid_: Potion, provision, shop item
+
+**Modifier**:
+A single generated prefix or suffix that changes an item's identity, value, or tactical use.
+_Avoid_: Affix, enchantment, rarity
 
 **Pack**:
 The Adventurer's carried item collection, constrained by practical capacity and separate from equipped gear.
@@ -127,6 +147,10 @@ _Avoid_: Console, feed, transcript
 **Journal**:
 The persistent record of discovered lore, quest state, help text, and memorable events across play sessions.
 _Avoid_: Codex, notebook, quest log
+
+**Windglass Lens**:
+The final objective recovered from the sealed fourth floor of The Keep and returned to Town to win the first dungeon arc.
+_Avoid_: Boss kill, relic, MacGuffin
 
 **Save Slot**:
 A browser-local saved game position that can be continued later without a server account.
