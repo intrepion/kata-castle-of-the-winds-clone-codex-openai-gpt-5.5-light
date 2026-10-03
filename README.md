@@ -15,6 +15,8 @@ The implementation target is deliberately small and static: `index.html`, `style
 - Present Town as a command hub, not a walkable Tile map.
 - Ship the first dungeon arc as four floors ending with recovery of the Windglass Lens.
 - Use restrained generated loot names: base item plus one Modifier.
+- Ship MVP 1 silently; audio is out of scope for the first playable version.
+- Design desktop and laptop viewports first, with a usable tablet-width fallback.
 
 ## MVP 1 Scope
 
@@ -58,3 +60,5 @@ MVP completion requires browser evidence, not just syntax checks:
 7. Save to a Save Slot.
 8. Reload and continue the saved game.
 9. Confirm the browser console has no application errors.
+
+After verification passes, the playable MVP should be committed and pushed in one implementation commit, followed by local and remote SHA alignment checks.
