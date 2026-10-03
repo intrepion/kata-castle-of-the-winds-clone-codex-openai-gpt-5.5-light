@@ -92,7 +92,7 @@ const EMPTY_EQUIPMENT = {
 
 const state = {
   mode: "town",
-  hero: createHero("sentinel"),
+  adventurer: createAdventurer("sentinel"),
   day: 1,
   turn: 0,
   floor: 1,
@@ -125,7 +125,7 @@ function bindUi() {
   ui.turnLabel = document.querySelector("#turn-label");
   ui.townView = document.querySelector("#town-view");
   ui.dungeonView = document.querySelector("#dungeon-view");
-  ui.heroPanel = document.querySelector("#hero-panel");
+  ui.adventurerPanel = document.querySelector("#adventurer-panel");
   ui.paperDoll = document.querySelector("#paper-doll");
   ui.packList = document.querySelector("#pack-list");
   ui.packCount = document.querySelector("#pack-count");
@@ -157,8 +157,9 @@ function bindActions() {
     if (action === "journal" || action === "help") openJournal();
     if (action === "rest") restInTown();
     if (action === "buy-supply") buySupply();
-    if (action === "sell-trinket") sellTrinket();
+    if (action === "sell-spare") sellSpare();
     if (action === "enter-keep") enterKeep();
+    if (action === "return-town") returnToTown();
     if (action === "choose-class") startNewGame(button.dataset.classId);
     if (action === "save-slot") useSaveSlot(Number(button.dataset.slot), button.dataset.intent);
     if (action === "select-spell") selectSpell(button.dataset.spellId);
@@ -183,7 +184,7 @@ function bindActions() {
   });
 }
 
-function createHero(classId) {
+function createAdventurer(classId) {
   const template = CLASSES[classId];
   return {
     classId,
@@ -217,7 +218,7 @@ function renderClassChoices() {
 
 function startNewGame(classId) {
   state.mode = "town";
-  state.hero = createHero(classId);
+  state.adventurer = createAdventurer(classId);
   state.day = 1;
   state.turn = 0;
   state.floor = 1;
@@ -229,48 +230,48 @@ function startNewGame(classId) {
   state.log = [];
   state.journal = [
     "Greyglass Town hired you to recover the Windglass Lens from the sealed fourth floor.",
-    `${state.hero.className} entered the charter under a cold glass moon.`,
+    `${state.adventurer.className} entered the charter under a cold glass moon.`,
     "The Keep respects preparation: rest, carry supplies, and save before descending."
   ];
   ui.newGameDialog.close();
-  addLog(`${state.hero.className} signs the Greyglass charter.`);
+  addLog(`${state.adventurer.className} signs the Greyglass charter.`);
   render();
 }
 
 function restInTown() {
-  state.hero.hp = state.hero.maxHp;
-  state.hero.mana = state.hero.maxMana;
+  state.adventurer.hp = state.adventurer.maxHp;
+  state.adventurer.mana = state.adventurer.maxMana;
   state.day += 1;
   addLog(`Restored in Town. DAY ${state.day} begins.`);
   render();
 }
 
 function buySupply() {
-  if (state.hero.gold < 5) {
+  if (state.adventurer.gold < 5) {
     addLog("Not enough gold for another Field Supply.");
     render();
     return;
   }
-  if (state.hero.pack.length >= state.hero.packLimit) {
+  if (state.adventurer.pack.length >= state.adventurer.packLimit) {
     addLog("The Pack is full. Sell something before buying more.");
     render();
     return;
   }
-  state.hero.gold -= 5;
-  state.hero.pack.push("Field Supply");
+  state.adventurer.gold -= 5;
+  state.adventurer.pack.push("Field Supply");
   addLog("Bought Field Supply for 5 gold.");
   render();
 }
 
-function sellTrinket() {
-  const index = state.hero.pack.findIndex((item) => item !== "Field Supply");
+function sellSpare() {
+  const index = state.adventurer.pack.findIndex((item) => item !== "Field Supply");
   if (index === -1) {
-    addLog("No spare trinket worth selling.");
+    addLog("No spare Pack item worth selling.");
     render();
     return;
   }
-  const [item] = state.hero.pack.splice(index, 1);
-  state.hero.gold += 4;
+  const [item] = state.adventurer.pack.splice(index, 1);
+  state.adventurer.gold += 4;
   addLog(`Sold ${item} for 4 gold.`);
   render();
 }
@@ -291,9 +292,20 @@ function enterKeep() {
 }
 
 function returnToTown() {
+  if (state.mode !== "dungeon") {
+    addLog("Already in Greyglass Town.");
+    render();
+    return;
+  }
   state.mode = "town";
   state.dungeon = null;
-  addLog("Returned to Greyglass Town.");
+  if (state.hasLens) {
+    state.won = true;
+    state.journal.push("The Windglass Lens returned to Town, bright enough to still the old aqueduct winds.");
+    addLog("Returned the Windglass Lens to Greyglass Town. Victory.");
+  } else {
+    addLog("Returned to Greyglass Town.");
+  }
   render();
 }
 
@@ -305,7 +317,7 @@ function openJournal() {
 function openSaveDialog(intent) {
   ui.saveSlots.innerHTML = [1, 2, 3].map((slot) => {
     const save = readSave(slot);
-    const label = save ? `${save.hero.className} · ${save.mode} · DAY ${save.day} · TURN ${String(save.turn).padStart(3, "0")}` : "Empty";
+    const label = save ? `${save.adventurer.className} · ${save.mode} · DAY ${save.day} · TURN ${String(save.turn).padStart(3, "0")}` : "Empty";
     const disabled = intent === "load" && !save ? "disabled" : "";
     return `
       <button type="button" class="slot-card" data-action="save-slot" data-slot="${slot}" data-intent="${intent}" ${disabled}>
@@ -338,10 +350,18 @@ function readSave(slot) {
   const raw = localStorage.getItem(`${STORAGE_PREFIX}${slot}`);
   if (!raw) return null;
   try {
-    return JSON.parse(raw);
+    return normalizeSave(JSON.parse(raw));
   } catch {
     return null;
   }
+}
+
+function normalizeSave(save) {
+  if (save.hero && !save.adventurer) {
+    save.adventurer = save.hero;
+    delete save.hero;
+  }
+  return save;
 }
 
 function addLog(message) {
@@ -353,31 +373,32 @@ function createDungeonFloor(floor) {
   const tiles = Array.from({ length: MAP_WIDTH * MAP_HEIGHT }, (_, index) => {
     const x = index % MAP_WIDTH;
     const y = Math.floor(index / MAP_WIDTH);
-    const wall = x === 0 || y === 0 || x === MAP_WIDTH - 1 || y === MAP_HEIGHT - 1;
     return {
       x,
       y,
-      terrain: wall ? "wall" : "floor",
+      terrain: "wall",
       explored: false,
       visible: false
     };
   });
 
-  carveRoom(tiles, 2, 2, 8, 5);
-  carveRoom(tiles, 12, 3, 8, 6);
-  carveRoom(tiles, 5, 10, 9, 5);
-  carveRoom(tiles, 17, 11, 8, 4);
+  const shift = floor % 3;
+  carveRoom(tiles, 2, 2, 8 + shift, 5);
+  carveRoom(tiles, 12, 2 + shift, 8, 6);
+  carveRoom(tiles, 4 + shift, 10, 9, 5);
+  carveRoom(tiles, 17, 10 + (floor % 2), 8, 5);
   carveHall(tiles, 6, 4, 16, 4);
   carveHall(tiles, 16, 4, 16, 13);
-  carveHall(tiles, 9, 12, 21, 12);
+  carveHall(tiles, 9, 12, 23, 12);
   carveHall(tiles, 9, 4, 9, 12);
+  carveHall(tiles, 23, 12, 23, 13);
 
   const player = { x: 4, y: 4 };
   getTile(tiles, player.x, player.y).terrain = "floor";
   getTile(tiles, 23, 13).terrain = floor === 4 ? "lens" : "stairs";
-  getTile(tiles, 15, 5).terrain = "door";
-  getTile(tiles, 8, 12).terrain = "trap";
-  getTile(tiles, 20, 12).terrain = "treasure";
+  getTile(tiles, 15 + (floor % 2), 5).terrain = "door";
+  getTile(tiles, 8 + shift, 12).terrain = "trap";
+  getTile(tiles, 20 - shift, 12).terrain = "treasure";
 
   const depthBonus = floor - 1;
   return {
@@ -385,10 +406,10 @@ function createDungeonFloor(floor) {
     player,
     tiles,
     monsters: [
-      createMonster("guard", 15, 6, depthBonus),
+      createMonster("guard", 14 + shift, 6, depthBonus),
       createMonster("hunter", 21, 12, depthBonus),
-      createMonster("skulker", 7, 13, depthBonus),
-      createMonster("hexer", 18, 4, depthBonus)
+      createMonster("skulker", 7 + shift, 13, depthBonus),
+      createMonster("hexer", 18, 4 + (floor % 2), depthBonus)
     ]
   };
 }
@@ -487,8 +508,8 @@ function tryMove(dx, dy) {
   state.dungeon.player.x = target.x;
   state.dungeon.player.y = target.y;
   if (target.terrain === "trap") {
-    const damage = Math.max(1, 5 - state.hero.defense);
-    state.hero.hp = Math.max(0, state.hero.hp - damage);
+    const damage = Math.max(1, 5 - state.adventurer.defense);
+    state.adventurer.hp = Math.max(0, state.adventurer.hp - damage);
     target.terrain = "floor";
     advanceTurn(`Roll: trap springs for ${damage} damage.`);
     checkDefeat();
@@ -523,11 +544,11 @@ function advanceTurn(message) {
 }
 
 function attackMonster(monster) {
-  const roll = rollD6() + state.hero.attack;
+  const roll = rollD6() + state.adventurer.attack;
   const defense = 7 + monster.defense;
   let defeated = false;
   if (roll >= defense) {
-    const damage = Math.max(1, state.hero.attack + rollD3() - monster.defense);
+    const damage = Math.max(1, state.adventurer.attack + rollD3() - monster.defense);
     monster.hp -= damage;
     addLog(`Roll ${roll} vs ${defense}: hit ${monster.name} for ${damage}.`);
     if (monster.hp <= 0) {
@@ -542,13 +563,17 @@ function attackMonster(monster) {
 
 function defeatMonster(monster) {
   state.dungeon.monsters = state.dungeon.monsters.filter((candidate) => candidate.id !== monster.id);
-  state.hero.gold += 3;
+  state.adventurer.gold += 3;
   addLog(`${monster.name} falls. Found 3 gold.`);
 }
 
 function moveMonsters() {
   for (const monster of [...state.dungeon.monsters]) {
     const distance = Math.abs(monster.x - state.dungeon.player.x) + Math.abs(monster.y - state.dungeon.player.y);
+    if (monster.behavior === "Hexer" && distance <= 5) {
+      hexMonster(monster);
+      continue;
+    }
     if (distance === 1) {
       monsterAttack(monster);
       continue;
@@ -569,16 +594,31 @@ function moveMonsters() {
 
 function monsterAttack(monster) {
   const roll = rollD6() + monster.attack;
-  const defense = 8 + state.hero.defense + (state.wardTurns > 0 ? 3 : 0);
+  const defense = 8 + state.adventurer.defense + (state.wardTurns > 0 ? 3 : 0);
   if (roll >= defense) {
-    const damage = Math.max(1, monster.attack + rollD3() - state.hero.defense);
-    state.hero.hp = Math.max(0, state.hero.hp - damage);
+    const damage = Math.max(1, monster.attack + rollD3() - state.adventurer.defense);
+    state.adventurer.hp = Math.max(0, state.adventurer.hp - damage);
     addLog(`Roll ${roll} vs ${defense}: ${monster.name} hits for ${damage}.`);
     checkDefeat();
   } else {
     addLog(`Roll ${roll} vs ${defense}: ${monster.name} misses.`);
   }
 }
+
+function hexMonster(monster) {
+  const roll = rollD6() + monster.attack;
+  const defense = 9 + (state.wardTurns > 0 ? 3 : 0);
+  if (roll >= defense) {
+    const damage = 2 + rollD3();
+    state.adventurer.hp = Math.max(0, state.adventurer.hp - damage);
+    state.adventurer.mana = Math.max(0, state.adventurer.mana - 1);
+    addLog(`Roll ${roll} vs ${defense}: ${monster.name} hexes for ${damage} and drains 1 mana.`);
+    checkDefeat();
+  } else {
+    addLog(`Roll ${roll} vs ${defense}: ${monster.name}'s hex scatters.`);
+  }
+}
+
 
 function stepToward(x, y, tx, ty) {
   const options = [
@@ -607,7 +647,7 @@ function selectSpell(spellId) {
 function castSpellAt(tile) {
   const spell = SPELLS[state.activeSpell];
   if (!spell) return;
-  if (state.hero.mana < spell.cost) {
+  if (state.adventurer.mana < spell.cost) {
     addLog(`Not enough mana for ${spell.name}.`);
     state.activeSpell = null;
     render();
@@ -619,7 +659,7 @@ function castSpellAt(tile) {
     if (!monster) {
       addLog("Spark needs a visible monster.");
     } else {
-      state.hero.mana -= spell.cost;
+      state.adventurer.mana -= spell.cost;
       const damage = 6 + rollD3();
       monster.hp -= damage;
       addLog(`Roll: Spark burns ${monster.name} for ${damage}.`);
@@ -630,7 +670,7 @@ function castSpellAt(tile) {
     if (!monster) {
       addLog("Glassbind needs a visible monster.");
     } else {
-      state.hero.mana -= spell.cost;
+      state.adventurer.mana -= spell.cost;
       monster.rooted = 3;
       advanceTurn(`Roll: ${monster.name} is bound in glass for 3 turns.`);
     }
@@ -641,15 +681,15 @@ function castSpellAt(tile) {
 
 function castSelfSpell(spellId) {
   const spell = SPELLS[spellId];
-  if (state.hero.mana < spell.cost) {
+  if (state.adventurer.mana < spell.cost) {
     addLog(`Not enough mana for ${spell.name}.`);
     render();
     return;
   }
-  state.hero.mana -= spell.cost;
+  state.adventurer.mana -= spell.cost;
   if (spellId === "mend") {
     const amount = 8 + rollD3();
-    state.hero.hp = Math.min(state.hero.maxHp, state.hero.hp + amount);
+    state.adventurer.hp = Math.min(state.adventurer.maxHp, state.adventurer.hp + amount);
     advanceTurn(`Roll: Mend restores ${amount} health.`);
   }
   if (spellId === "ward") {
@@ -672,10 +712,10 @@ function castSelfSpell(spellId) {
 function collectTreasure(tile) {
   const item = `${LOOT_MODIFIERS[(state.turn + tile.x) % LOOT_MODIFIERS.length]} ${LOOT_BASES[(state.turn + tile.y) % LOOT_BASES.length]}`;
   tile.terrain = "floor";
-  if (state.hero.pack.length >= state.hero.packLimit) {
+  if (state.adventurer.pack.length >= state.adventurer.packLimit) {
     addLog(`Found ${item}, but the Pack is full.`);
   } else {
-    state.hero.pack.push(item);
+    state.adventurer.pack.push(item);
     addLog(`Found ${item}.`);
   }
   advanceTurn("The cache is empty now.");
@@ -695,29 +735,26 @@ function descendStairs() {
 function recoverLens(tile) {
   tile.terrain = "floor";
   state.hasLens = true;
-  state.won = true;
-  state.mode = "town";
-  state.dungeon = null;
-  state.journal.push("The Windglass Lens returned to Town, bright enough to still the old aqueduct winds.");
-  addLog("Recovered the Windglass Lens and returned to Greyglass Town. Victory.");
+  state.journal.push("The Windglass Lens is recovered. Return it to Greyglass Town to finish the charter.");
+  addLog("Recovered the Windglass Lens. Return to Town to win.");
   render();
 }
 
 function checkDefeat() {
-  if (state.hero.hp > 0) return;
+  if (state.adventurer.hp > 0) return;
   addLog("The Adventurer falls. Reload a Save Slot to continue.");
   setTimeout(() => openSaveDialog("load"), 0);
 }
 
 function useSupply() {
-  const index = state.hero.pack.indexOf("Field Supply");
+  const index = state.adventurer.pack.indexOf("Field Supply");
   if (index === -1) {
     addLog("No Field Supply remains.");
     render();
     return;
   }
-  state.hero.pack.splice(index, 1);
-  state.hero.hp = Math.min(state.hero.maxHp, state.hero.hp + 6);
+  state.adventurer.pack.splice(index, 1);
+  state.adventurer.hp = Math.min(state.adventurer.maxHp, state.adventurer.hp + 6);
   addLog("Used Field Supply for 6 health.");
   render();
 }
@@ -767,12 +804,12 @@ function describeTile(tile) {
 }
 
 function render() {
-  ui.subtitle.textContent = `${state.hero.className} · ${state.mode === "town" ? "Town" : "The Keep"}`;
+  ui.subtitle.textContent = `${state.adventurer.className} · ${state.mode === "town" ? "Town" : "The Keep"}`;
   ui.mapTitle.textContent = state.mode === "town" ? "Town" : `The Keep · Floor ${state.floor}`;
   ui.turnLabel.textContent = `DAY ${state.day} · TURN ${String(state.turn).padStart(3, "0")}`;
   ui.townView.classList.toggle("hidden", state.mode !== "town");
   ui.dungeonView.classList.toggle("hidden", state.mode !== "dungeon");
-  renderHero();
+  renderAdventurer();
   renderPaperDoll();
   renderPack();
   renderSpells();
@@ -798,10 +835,10 @@ function renderDungeon() {
 
 function tileGlyph(tile, fog) {
   if (fog === "unseen") return "";
-  if (fog === "explored") return "·";
+  if (fog === "explored") return ".";
   return {
-    floor: "·",
-    wall: "■",
+    floor: ".",
+    wall: "#",
     door: "+",
     stairs: ">",
     trap: "!",
@@ -810,14 +847,14 @@ function tileGlyph(tile, fog) {
   }[tile.terrain] || "?";
 }
 
-function renderHero() {
-  ui.heroPanel.innerHTML = `
-    <div class="stat-line"><span>Class</span><strong>${state.hero.className}</strong></div>
-    <div class="stat-line"><span>Health</span><strong>${state.hero.hp}/${state.hero.maxHp}</strong></div>
-    <div class="stat-line"><span>Mana</span><strong>${state.hero.mana}/${state.hero.maxMana}</strong></div>
-    <div class="stat-line"><span>Attack</span><strong>${state.hero.attack}</strong></div>
-    <div class="stat-line"><span>Defense</span><strong>${state.hero.defense}</strong></div>
-    <div class="stat-line"><span>Gold</span><strong>${state.hero.gold}</strong></div>
+function renderAdventurer() {
+  ui.adventurerPanel.innerHTML = `
+    <div class="stat-line"><span>Class</span><strong>${state.adventurer.className}</strong></div>
+    <div class="stat-line"><span>Health</span><strong>${state.adventurer.hp}/${state.adventurer.maxHp}</strong></div>
+    <div class="stat-line"><span>Mana</span><strong>${state.adventurer.mana}/${state.adventurer.maxMana}</strong></div>
+    <div class="stat-line"><span>Attack</span><strong>${state.adventurer.attack}</strong></div>
+    <div class="stat-line"><span>Defense</span><strong>${state.adventurer.defense}</strong></div>
+    <div class="stat-line"><span>Gold</span><strong>${state.adventurer.gold}</strong></div>
   `;
 }
 
@@ -831,20 +868,20 @@ function renderPaperDoll() {
     charm: "Charm"
   };
   ui.paperDoll.innerHTML = Object.entries(labels).map(([slot, label]) => `
-    <div class="slot-line"><span>${label}</span><strong>${state.hero.equipment[slot]}</strong></div>
+    <div class="slot-line"><span>${label}</span><strong>${state.adventurer.equipment[slot]}</strong></div>
   `).join("");
 }
 
 function renderPack() {
-  ui.packCount.textContent = `${state.hero.pack.length}/${state.hero.packLimit}`;
-  ui.packList.innerHTML = state.hero.pack.length
-    ? state.hero.pack.map((item) => `<li>${item}${item === "Field Supply" ? ' <button type="button" data-action="use-supply">Use</button>' : ""}</li>`).join("")
+  ui.packCount.textContent = `${state.adventurer.pack.length}/${state.adventurer.packLimit}`;
+  ui.packList.innerHTML = state.adventurer.pack.length
+    ? state.adventurer.pack.map((item) => `<li>${item}${item === "Field Supply" ? ' <button type="button" data-action="use-supply">Use</button>' : ""}</li>`).join("")
     : "<li>Empty</li>";
 }
 
 function renderSpells() {
   ui.spellList.innerHTML = Object.entries(SPELLS).map(([spellId, spell]) => {
-    const disabled = state.mode !== "dungeon" || state.hero.mana < spell.cost ? "disabled" : "";
+    const disabled = state.mode !== "dungeon" || state.adventurer.mana < spell.cost ? "disabled" : "";
     const active = state.activeSpell === spellId ? " active" : "";
     const action = ["mend", "ward", "reveal", "blink"].includes(spellId) ? `onclick="castSelfSpell('${spellId}')"` : `data-action="select-spell" data-spell-id="${spellId}"`;
     return `<button type="button" class="spell-button${active}" ${action} ${disabled}><strong>${spell.name}</strong><span>${spell.cost} mana · ${spell.summary}</span></button>`;
