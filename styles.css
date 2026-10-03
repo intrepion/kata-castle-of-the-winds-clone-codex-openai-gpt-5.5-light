@@ -149,6 +149,76 @@ button:active {
   line-height: 1.45;
 }
 
+.dungeon-view {
+  display: grid;
+  grid-template-columns: repeat(28, minmax(0, 1fr));
+  gap: 1px;
+  padding: 10px;
+  background: #1b1a17;
+  min-height: 530px;
+  align-content: start;
+}
+
+.tile {
+  display: grid;
+  aspect-ratio: 1;
+  min-width: 0;
+  min-height: 0;
+  place-items: center;
+  border: 0;
+  background: #2e2b25;
+  color: #dacfb8;
+  font-family: "Courier New", monospace;
+  font-size: 1rem;
+  line-height: 1;
+  outline-offset: -2px;
+}
+
+.tile.visible {
+  background: #4b4538;
+}
+
+.tile.explored {
+  background: #302d28;
+  color: #837b6a;
+}
+
+.tile.unseen {
+  background: #11100e;
+  color: transparent;
+}
+
+.tile.terrain-wall.visible {
+  background: #222d32;
+  color: #9bb5b5;
+}
+
+.tile.terrain-door.visible {
+  background: #5b4530;
+  color: #f3d79a;
+}
+
+.tile.terrain-stairs.visible {
+  background: #263a45;
+  color: #aee4e2;
+}
+
+.tile.terrain-trap.visible {
+  background: #4b3935;
+  color: #f4aa82;
+}
+
+.tile.terrain-treasure.visible {
+  background: #4c432b;
+  color: #ffd66e;
+}
+
+.tile.player {
+  background: var(--glass);
+  color: #10262a;
+  font-weight: 700;
+}
+
 .town-actions,
 .class-choices,
 .save-slots {

@@ -1,6 +1,9 @@
 "use strict";
 
 const STORAGE_PREFIX = "windglass-save-";
+const MAP_WIDTH = 28;
+const MAP_HEIGHT = 18;
+const SIGHT_RADIUS = 5;
 
 const CLASSES = {
   sentinel: {
@@ -73,6 +76,8 @@ const state = {
   hero: createHero("sentinel"),
   day: 1,
   turn: 0,
+  floor: 1,
+  dungeon: null,
   log: [],
   journal: [
     "Greyglass Town hired you to recover the Windglass Lens from the sealed fourth floor.",
@@ -112,6 +117,12 @@ function bindUi() {
 
 function bindActions() {
   document.addEventListener("click", (event) => {
+    const tile = event.target.closest("[data-tile-index]");
+    if (tile) {
+      handleTileClick(Number(tile.dataset.tileIndex));
+      return;
+    }
+
     const button = event.target.closest("[data-action]");
     if (!button) return;
 
@@ -126,6 +137,23 @@ function bindActions() {
     if (action === "enter-keep") enterKeep();
     if (action === "choose-class") startNewGame(button.dataset.classId);
     if (action === "save-slot") useSaveSlot(Number(button.dataset.slot), button.dataset.intent);
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (state.mode !== "dungeon" || event.target.closest("dialog")) return;
+    const movement = {
+      ArrowUp: [0, -1],
+      KeyW: [0, -1],
+      ArrowDown: [0, 1],
+      KeyS: [0, 1],
+      ArrowLeft: [-1, 0],
+      KeyA: [-1, 0],
+      ArrowRight: [1, 0],
+      KeyD: [1, 0]
+    }[event.code];
+    if (!movement) return;
+    event.preventDefault();
+    tryMove(movement[0], movement[1]);
   });
 }
 
@@ -166,6 +194,8 @@ function startNewGame(classId) {
   state.hero = createHero(classId);
   state.day = 1;
   state.turn = 0;
+  state.floor = 1;
+  state.dungeon = null;
   state.log = [];
   state.journal = [
     "Greyglass Town hired you to recover the Windglass Lens from the sealed fourth floor.",
@@ -216,8 +246,18 @@ function sellTrinket() {
 }
 
 function enterKeep() {
+  if (!state.dungeon) {
+    state.dungeon = createDungeonFloor(state.floor);
+    updateVisibility();
+  }
   state.mode = "dungeon";
-  addLog("The first gate is still being surveyed. Dungeon MVP unlocks next.");
+  addLog(`Entered The Keep floor ${state.floor}.`);
+  render();
+}
+
+function returnToTown() {
+  state.mode = "town";
+  addLog("Returned to Greyglass Town.");
   render();
 }
 
@@ -273,6 +313,143 @@ function addLog(message) {
   state.log = state.log.slice(-24);
 }
 
+function createDungeonFloor(floor) {
+  const tiles = Array.from({ length: MAP_WIDTH * MAP_HEIGHT }, (_, index) => {
+    const x = index % MAP_WIDTH;
+    const y = Math.floor(index / MAP_WIDTH);
+    const wall = x === 0 || y === 0 || x === MAP_WIDTH - 1 || y === MAP_HEIGHT - 1;
+    return {
+      x,
+      y,
+      terrain: wall ? "wall" : "floor",
+      explored: false,
+      visible: false
+    };
+  });
+
+  carveRoom(tiles, 2, 2, 8, 5);
+  carveRoom(tiles, 12, 3, 8, 6);
+  carveRoom(tiles, 5, 10, 9, 5);
+  carveRoom(tiles, 17, 11, 8, 4);
+  carveHall(tiles, 6, 4, 16, 4);
+  carveHall(tiles, 16, 4, 16, 13);
+  carveHall(tiles, 9, 12, 21, 12);
+  carveHall(tiles, 9, 4, 9, 12);
+
+  const player = { x: 4, y: 4 };
+  getTile(tiles, player.x, player.y).terrain = "floor";
+  getTile(tiles, 23, 13).terrain = "stairs";
+  getTile(tiles, 15, 5).terrain = "door";
+  getTile(tiles, 8, 12).terrain = "trap";
+  getTile(tiles, 20, 12).terrain = "treasure";
+
+  return { floor, player, tiles };
+}
+
+function carveRoom(tiles, left, top, width, height) {
+  for (let y = top; y < top + height; y += 1) {
+    for (let x = left; x < left + width; x += 1) {
+      getTile(tiles, x, y).terrain = "floor";
+    }
+  }
+}
+
+function carveHall(tiles, x1, y1, x2, y2) {
+  const dx = Math.sign(x2 - x1);
+  const dy = Math.sign(y2 - y1);
+  let x = x1;
+  let y = y1;
+  while (x !== x2 || y !== y2) {
+    getTile(tiles, x, y).terrain = "floor";
+    if (x !== x2) x += dx;
+    if (y !== y2) y += dy;
+  }
+  getTile(tiles, x2, y2).terrain = "floor";
+}
+
+function getTile(tiles, x, y) {
+  return tiles[y * MAP_WIDTH + x];
+}
+
+function handleTileClick(index) {
+  if (state.mode !== "dungeon" || !state.dungeon) return;
+  const tile = state.dungeon.tiles[index];
+  if (!tile || !tile.visible) {
+    addLog("That Tile is beyond your current sight.");
+    render();
+    return;
+  }
+
+  const dx = tile.x - state.dungeon.player.x;
+  const dy = tile.y - state.dungeon.player.y;
+  if (Math.abs(dx) + Math.abs(dy) === 1) {
+    tryMove(dx, dy);
+    return;
+  }
+
+  addLog(describeTile(tile));
+  render();
+}
+
+function tryMove(dx, dy) {
+  if (!state.dungeon) return;
+  const target = getTile(state.dungeon.tiles, state.dungeon.player.x + dx, state.dungeon.player.y + dy);
+  if (!target || target.terrain === "wall") {
+    addLog("Roll: stone blocks the way.");
+    render();
+    return;
+  }
+  if (target.terrain === "door") {
+    target.terrain = "floor";
+    advanceTurn("Roll: opened a swollen oak door.");
+    return;
+  }
+  state.dungeon.player.x = target.x;
+  state.dungeon.player.y = target.y;
+  const terrainNote = target.terrain === "stairs" ? " Stairs descend here." : target.terrain === "treasure" ? " Something glints nearby." : target.terrain === "trap" ? " The floor is scratched with old warning marks." : "";
+  advanceTurn(`Moved to Tile ${target.x},${target.y}.${terrainNote}`);
+}
+
+function advanceTurn(message) {
+  state.turn += 1;
+  updateVisibility();
+  addLog(message);
+  render();
+}
+
+function updateVisibility() {
+  if (!state.dungeon) return;
+  for (const tile of state.dungeon.tiles) {
+    const distance = Math.abs(tile.x - state.dungeon.player.x) + Math.abs(tile.y - state.dungeon.player.y);
+    tile.visible = distance <= SIGHT_RADIUS && hasLineOfSight(tile.x, tile.y);
+    if (tile.visible) tile.explored = true;
+  }
+}
+
+function hasLineOfSight(x, y) {
+  const start = state.dungeon.player;
+  const steps = Math.max(Math.abs(x - start.x), Math.abs(y - start.y));
+  if (steps === 0) return true;
+  for (let i = 1; i < steps; i += 1) {
+    const ix = Math.round(start.x + ((x - start.x) * i) / steps);
+    const iy = Math.round(start.y + ((y - start.y) * i) / steps);
+    if (getTile(state.dungeon.tiles, ix, iy).terrain === "wall") return false;
+  }
+  return true;
+}
+
+function describeTile(tile) {
+  const name = {
+    floor: "floor stone",
+    wall: "wall",
+    door: "closed door",
+    stairs: "descending stairs",
+    trap: "suspicious floor",
+    treasure: "glinting cache"
+  }[tile.terrain] || tile.terrain;
+  return `Inspected Tile ${tile.x},${tile.y}: ${name}.`;
+}
+
 function render() {
   ui.subtitle.textContent = `${state.hero.className} · ${state.mode === "town" ? "Town" : "The Keep"}`;
   ui.mapTitle.textContent = state.mode === "town" ? "Town" : "The Keep";
@@ -282,7 +459,36 @@ function render() {
   renderHero();
   renderPaperDoll();
   renderPack();
+  renderDungeon();
   renderLog();
+}
+
+function renderDungeon() {
+  if (!state.dungeon) {
+    ui.dungeonView.innerHTML = "";
+    return;
+  }
+
+  ui.dungeonView.innerHTML = state.dungeon.tiles.map((tile, index) => {
+    const occupied = tile.x === state.dungeon.player.x && tile.y === state.dungeon.player.y;
+    const fog = tile.visible ? "visible" : tile.explored ? "explored" : "unseen";
+    const label = occupied ? "Adventurer" : fog === "unseen" ? "Unseen Tile" : describeTile(tile);
+    const glyph = occupied ? "@" : tileGlyph(tile, fog);
+    return `<button type="button" class="tile ${fog} terrain-${tile.terrain} ${occupied ? "player" : ""}" data-tile-index="${index}" aria-label="${label}">${glyph}</button>`;
+  }).join("");
+}
+
+function tileGlyph(tile, fog) {
+  if (fog === "unseen") return "";
+  if (fog === "explored") return "·";
+  return {
+    floor: "·",
+    wall: "■",
+    door: "+",
+    stairs: ">",
+    trap: "!",
+    treasure: "$"
+  }[tile.terrain] || "?";
 }
 
 function renderHero() {
