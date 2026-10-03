@@ -99,6 +99,8 @@ const state = {
   dungeon: null,
   activeSpell: null,
   wardTurns: 0,
+  hasLens: false,
+  won: false,
   log: [],
   journal: [
     "Greyglass Town hired you to recover the Windglass Lens from the sealed fourth floor.",
@@ -222,6 +224,8 @@ function startNewGame(classId) {
   state.dungeon = null;
   state.activeSpell = null;
   state.wardTurns = 0;
+  state.hasLens = false;
+  state.won = false;
   state.log = [];
   state.journal = [
     "Greyglass Town hired you to recover the Windglass Lens from the sealed fourth floor.",
@@ -272,6 +276,11 @@ function sellTrinket() {
 }
 
 function enterKeep() {
+  if (state.won) {
+    addLog("The Windglass Lens is safe. Greyglass Town can breathe again.");
+    render();
+    return;
+  }
   if (!state.dungeon) {
     state.dungeon = createDungeonFloor(state.floor);
     updateVisibility();
@@ -283,6 +292,7 @@ function enterKeep() {
 
 function returnToTown() {
   state.mode = "town";
+  state.dungeon = null;
   addLog("Returned to Greyglass Town.");
   render();
 }
@@ -364,25 +374,26 @@ function createDungeonFloor(floor) {
 
   const player = { x: 4, y: 4 };
   getTile(tiles, player.x, player.y).terrain = "floor";
-  getTile(tiles, 23, 13).terrain = "stairs";
+  getTile(tiles, 23, 13).terrain = floor === 4 ? "lens" : "stairs";
   getTile(tiles, 15, 5).terrain = "door";
   getTile(tiles, 8, 12).terrain = "trap";
   getTile(tiles, 20, 12).terrain = "treasure";
 
+  const depthBonus = floor - 1;
   return {
     floor,
     player,
     tiles,
     monsters: [
-      createMonster("guard", 15, 6),
-      createMonster("hunter", 21, 12),
-      createMonster("skulker", 7, 13),
-      createMonster("hexer", 18, 4)
+      createMonster("guard", 15, 6, depthBonus),
+      createMonster("hunter", 21, 12, depthBonus),
+      createMonster("skulker", 7, 13, depthBonus),
+      createMonster("hexer", 18, 4, depthBonus)
     ]
   };
 }
 
-function createMonster(type, x, y) {
+function createMonster(type, x, y, depthBonus = 0) {
   const template = MONSTER_TYPES[type];
   return {
     id: `${type}-${x}-${y}`,
@@ -392,9 +403,9 @@ function createMonster(type, x, y) {
     glyph: template.glyph,
     x,
     y,
-    hp: template.hp,
-    maxHp: template.hp,
-    attack: template.attack,
+    hp: template.hp + depthBonus * 2,
+    maxHp: template.hp + depthBonus * 2,
+    attack: template.attack + depthBonus,
     defense: template.defense,
     rooted: 0
   };
@@ -480,13 +491,22 @@ function tryMove(dx, dy) {
     state.hero.hp = Math.max(0, state.hero.hp - damage);
     target.terrain = "floor";
     advanceTurn(`Roll: trap springs for ${damage} damage.`);
+    checkDefeat();
     return;
   }
   if (target.terrain === "treasure") {
     collectTreasure(target);
     return;
   }
-  const terrainNote = target.terrain === "stairs" ? " Stairs descend here." : "";
+  if (target.terrain === "stairs") {
+    descendStairs();
+    return;
+  }
+  if (target.terrain === "lens") {
+    recoverLens(target);
+    return;
+  }
+  const terrainNote = "";
   advanceTurn(`Moved to Tile ${target.x},${target.y}.${terrainNote}`);
 }
 
@@ -554,6 +574,7 @@ function monsterAttack(monster) {
     const damage = Math.max(1, monster.attack + rollD3() - state.hero.defense);
     state.hero.hp = Math.max(0, state.hero.hp - damage);
     addLog(`Roll ${roll} vs ${defense}: ${monster.name} hits for ${damage}.`);
+    checkDefeat();
   } else {
     addLog(`Roll ${roll} vs ${defense}: ${monster.name} misses.`);
   }
@@ -660,6 +681,34 @@ function collectTreasure(tile) {
   advanceTurn("The cache is empty now.");
 }
 
+function descendStairs() {
+  if (state.floor >= 4) return;
+  state.floor += 1;
+  state.dungeon = createDungeonFloor(state.floor);
+  state.activeSpell = null;
+  updateVisibility();
+  state.turn += 1;
+  addLog(`Descended to The Keep floor ${state.floor}.`);
+  render();
+}
+
+function recoverLens(tile) {
+  tile.terrain = "floor";
+  state.hasLens = true;
+  state.won = true;
+  state.mode = "town";
+  state.dungeon = null;
+  state.journal.push("The Windglass Lens returned to Town, bright enough to still the old aqueduct winds.");
+  addLog("Recovered the Windglass Lens and returned to Greyglass Town. Victory.");
+  render();
+}
+
+function checkDefeat() {
+  if (state.hero.hp > 0) return;
+  addLog("The Adventurer falls. Reload a Save Slot to continue.");
+  setTimeout(() => openSaveDialog("load"), 0);
+}
+
 function useSupply() {
   const index = state.hero.pack.indexOf("Field Supply");
   if (index === -1) {
@@ -709,7 +758,8 @@ function describeTile(tile) {
     door: "closed door",
     stairs: "descending stairs",
     trap: "suspicious floor",
-    treasure: "glinting cache"
+    treasure: "glinting cache",
+    lens: "Windglass Lens"
   }[tile.terrain] || tile.terrain;
   const monster = monsterAt(tile.x, tile.y);
   if (monster) return `Inspected Tile ${tile.x},${tile.y}: ${monster.name} (${monster.behavior}) ${monster.hp}/${monster.maxHp} HP.`;
@@ -718,7 +768,7 @@ function describeTile(tile) {
 
 function render() {
   ui.subtitle.textContent = `${state.hero.className} · ${state.mode === "town" ? "Town" : "The Keep"}`;
-  ui.mapTitle.textContent = state.mode === "town" ? "Town" : "The Keep";
+  ui.mapTitle.textContent = state.mode === "town" ? "Town" : `The Keep · Floor ${state.floor}`;
   ui.turnLabel.textContent = `DAY ${state.day} · TURN ${String(state.turn).padStart(3, "0")}`;
   ui.townView.classList.toggle("hidden", state.mode !== "town");
   ui.dungeonView.classList.toggle("hidden", state.mode !== "dungeon");
@@ -755,7 +805,8 @@ function tileGlyph(tile, fog) {
     door: "+",
     stairs: ">",
     trap: "!",
-    treasure: "$"
+    treasure: "$",
+    lens: "*"
   }[tile.terrain] || "?";
 }
 
