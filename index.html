@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Windglass Keep</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div id="app" class="app-shell">
+      <header class="titlebar">
+        <div>
+          <strong>Windglass Keep</strong>
+          <span id="subtitle">Desktop dungeon crawler</span>
+        </div>
+        <nav class="menubar" aria-label="Game menu">
+          <button type="button" data-action="new-game">New</button>
+          <button type="button" data-action="save">Save</button>
+          <button type="button" data-action="load">Load</button>
+          <button type="button" data-action="journal">Journal</button>
+          <button type="button" data-action="help">Help</button>
+        </nav>
+      </header>
+
+      <main class="desktop">
+        <section class="window play-window" aria-labelledby="map-title">
+          <div class="window-title">
+            <span id="map-title">Town</span>
+            <span id="turn-label">DAY 1 · TURN 000</span>
+          </div>
+          <div id="town-view" class="town-view">
+            <div class="town-crest">
+              <span>WK</span>
+            </div>
+            <h1>Greyglass Town</h1>
+            <p>The Keep waits below the old aqueduct. Buy carefully, save often, and bring back the Windglass Lens.</p>
+            <div class="town-actions" aria-label="Town actions">
+              <button type="button" data-action="rest">Rest</button>
+              <button type="button" data-action="buy-supply">Buy Supply</button>
+              <button type="button" data-action="sell-trinket">Sell Trinket</button>
+              <button type="button" data-action="enter-keep">Enter The Keep</button>
+              <button type="button" data-action="journal">Read Journal</button>
+            </div>
+          </div>
+          <div id="dungeon-view" class="dungeon-view hidden" aria-label="Dungeon floor"></div>
+        </section>
+
+        <aside class="side-stack" aria-label="Adventurer panels">
+          <section class="window">
+            <div class="window-title"><span>Adventurer</span></div>
+            <div id="hero-panel" class="hero-panel"></div>
+          </section>
+
+          <section class="window">
+            <div class="window-title"><span>Paper Doll</span></div>
+            <div id="paper-doll" class="paper-doll"></div>
+          </section>
+
+          <section class="window">
+            <div class="window-title"><span>Pack</span><span id="pack-count"></span></div>
+            <ul id="pack-list" class="pack-list"></ul>
+          </section>
+        </aside>
+      </main>
+
+      <section class="window log-window" aria-labelledby="log-title">
+        <div class="window-title"><span id="log-title">Log</span></div>
+        <ol id="log-list" class="log-list" aria-live="polite"></ol>
+      </section>
+    </div>
+
+    <dialog id="new-game-dialog" class="dialog">
+      <form method="dialog">
+        <h2>New Adventurer</h2>
+        <p>Choose the class that will enter The Keep.</p>
+        <div id="class-choices" class="class-choices"></div>
+        <menu>
+          <button value="cancel">Cancel</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <dialog id="save-dialog" class="dialog">
+      <form method="dialog">
+        <h2>Save Slots</h2>
+        <div id="save-slots" class="save-slots"></div>
+        <menu>
+          <button value="cancel">Close</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <dialog id="journal-dialog" class="dialog">
+      <form method="dialog">
+        <h2>Journal</h2>
+        <div id="journal-content" class="journal-content"></div>
+        <menu>
+          <button value="cancel">Close</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <script src="game.js"></script>
+  </body>
+</html>
