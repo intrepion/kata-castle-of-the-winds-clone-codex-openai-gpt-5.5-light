@@ -5,6 +5,25 @@ const MAP_WIDTH = 28;
 const MAP_HEIGHT = 18;
 const SIGHT_RADIUS = 5;
 
+const SPELLS = {
+  spark: { name: "Spark", cost: 3, summary: "Damage a visible monster." },
+  mend: { name: "Mend", cost: 4, summary: "Restore health." },
+  ward: { name: "Ward", cost: 3, summary: "Raise defense briefly." },
+  reveal: { name: "Reveal", cost: 2, summary: "Expose more nearby Tiles." },
+  blink: { name: "Blink", cost: 3, summary: "Retreat to the entry." },
+  glassbind: { name: "Glassbind", cost: 4, summary: "Root a visible monster." }
+};
+
+const MONSTER_TYPES = {
+  guard: { name: "Gate Guard", behavior: "Guard", glyph: "G", hp: 10, attack: 4, defense: 2 },
+  hunter: { name: "Hollow Hunter", behavior: "Hunter", glyph: "H", hp: 8, attack: 5, defense: 1 },
+  skulker: { name: "Mirror Skulker", behavior: "Skulker", glyph: "S", hp: 7, attack: 4, defense: 1 },
+  hexer: { name: "Glass Hexer", behavior: "Hexer", glyph: "X", hp: 6, attack: 3, defense: 1 }
+};
+
+const LOOT_BASES = ["Dirk", "Buckler", "Ring", "Charm", "Helm", "Hauberk"];
+const LOOT_MODIFIERS = ["Keen", "Patient", "Windglass", "Foxed", "Blue", "Steady"];
+
 const CLASSES = {
   sentinel: {
     name: "Sentinel",
@@ -78,6 +97,8 @@ const state = {
   turn: 0,
   floor: 1,
   dungeon: null,
+  activeSpell: null,
+  wardTurns: 0,
   log: [],
   journal: [
     "Greyglass Town hired you to recover the Windglass Lens from the sealed fourth floor.",
@@ -106,6 +127,7 @@ function bindUi() {
   ui.paperDoll = document.querySelector("#paper-doll");
   ui.packList = document.querySelector("#pack-list");
   ui.packCount = document.querySelector("#pack-count");
+  ui.spellList = document.querySelector("#spell-list");
   ui.logList = document.querySelector("#log-list");
   ui.newGameDialog = document.querySelector("#new-game-dialog");
   ui.saveDialog = document.querySelector("#save-dialog");
@@ -137,6 +159,8 @@ function bindActions() {
     if (action === "enter-keep") enterKeep();
     if (action === "choose-class") startNewGame(button.dataset.classId);
     if (action === "save-slot") useSaveSlot(Number(button.dataset.slot), button.dataset.intent);
+    if (action === "select-spell") selectSpell(button.dataset.spellId);
+    if (action === "use-supply") useSupply();
   });
 
   document.addEventListener("keydown", (event) => {
@@ -196,6 +220,8 @@ function startNewGame(classId) {
   state.turn = 0;
   state.floor = 1;
   state.dungeon = null;
+  state.activeSpell = null;
+  state.wardTurns = 0;
   state.log = [];
   state.journal = [
     "Greyglass Town hired you to recover the Windglass Lens from the sealed fourth floor.",
@@ -343,7 +369,35 @@ function createDungeonFloor(floor) {
   getTile(tiles, 8, 12).terrain = "trap";
   getTile(tiles, 20, 12).terrain = "treasure";
 
-  return { floor, player, tiles };
+  return {
+    floor,
+    player,
+    tiles,
+    monsters: [
+      createMonster("guard", 15, 6),
+      createMonster("hunter", 21, 12),
+      createMonster("skulker", 7, 13),
+      createMonster("hexer", 18, 4)
+    ]
+  };
+}
+
+function createMonster(type, x, y) {
+  const template = MONSTER_TYPES[type];
+  return {
+    id: `${type}-${x}-${y}`,
+    type,
+    name: template.name,
+    behavior: template.behavior,
+    glyph: template.glyph,
+    x,
+    y,
+    hp: template.hp,
+    maxHp: template.hp,
+    attack: template.attack,
+    defense: template.defense,
+    rooted: 0
+  };
 }
 
 function carveRoom(tiles, left, top, width, height) {
@@ -383,7 +437,17 @@ function handleTileClick(index) {
   const dx = tile.x - state.dungeon.player.x;
   const dy = tile.y - state.dungeon.player.y;
   if (Math.abs(dx) + Math.abs(dy) === 1) {
+    const monster = monsterAt(tile.x, tile.y);
+    if (monster) {
+      attackMonster(monster);
+      return;
+    }
     tryMove(dx, dy);
+    return;
+  }
+
+  if (state.activeSpell) {
+    castSpellAt(tile);
     return;
   }
 
@@ -399,6 +463,11 @@ function tryMove(dx, dy) {
     render();
     return;
   }
+  const monster = monsterAt(target.x, target.y);
+  if (monster) {
+    attackMonster(monster);
+    return;
+  }
   if (target.terrain === "door") {
     target.terrain = "floor";
     advanceTurn("Roll: opened a swollen oak door.");
@@ -406,15 +475,210 @@ function tryMove(dx, dy) {
   }
   state.dungeon.player.x = target.x;
   state.dungeon.player.y = target.y;
-  const terrainNote = target.terrain === "stairs" ? " Stairs descend here." : target.terrain === "treasure" ? " Something glints nearby." : target.terrain === "trap" ? " The floor is scratched with old warning marks." : "";
+  if (target.terrain === "trap") {
+    const damage = Math.max(1, 5 - state.hero.defense);
+    state.hero.hp = Math.max(0, state.hero.hp - damage);
+    target.terrain = "floor";
+    advanceTurn(`Roll: trap springs for ${damage} damage.`);
+    return;
+  }
+  if (target.terrain === "treasure") {
+    collectTreasure(target);
+    return;
+  }
+  const terrainNote = target.terrain === "stairs" ? " Stairs descend here." : "";
   advanceTurn(`Moved to Tile ${target.x},${target.y}.${terrainNote}`);
 }
 
 function advanceTurn(message) {
   state.turn += 1;
+  if (state.wardTurns > 0) state.wardTurns -= 1;
+  for (const monster of state.dungeon.monsters) {
+    if (monster.rooted > 0) monster.rooted -= 1;
+  }
+  moveMonsters();
   updateVisibility();
   addLog(message);
   render();
+}
+
+function attackMonster(monster) {
+  const roll = rollD6() + state.hero.attack;
+  const defense = 7 + monster.defense;
+  let defeated = false;
+  if (roll >= defense) {
+    const damage = Math.max(1, state.hero.attack + rollD3() - monster.defense);
+    monster.hp -= damage;
+    addLog(`Roll ${roll} vs ${defense}: hit ${monster.name} for ${damage}.`);
+    if (monster.hp <= 0) {
+      defeatMonster(monster);
+      defeated = true;
+    }
+  } else {
+    addLog(`Roll ${roll} vs ${defense}: missed ${monster.name}.`);
+  }
+  advanceTurn(defeated ? `${monster.name} collapses into bright grit.` : `${monster.name} answers the noise.`);
+}
+
+function defeatMonster(monster) {
+  state.dungeon.monsters = state.dungeon.monsters.filter((candidate) => candidate.id !== monster.id);
+  state.hero.gold += 3;
+  addLog(`${monster.name} falls. Found 3 gold.`);
+}
+
+function moveMonsters() {
+  for (const monster of [...state.dungeon.monsters]) {
+    const distance = Math.abs(monster.x - state.dungeon.player.x) + Math.abs(monster.y - state.dungeon.player.y);
+    if (distance === 1) {
+      monsterAttack(monster);
+      continue;
+    }
+    if (monster.rooted > 0) continue;
+    if (monster.behavior === "Guard" && distance > 4) continue;
+    if (monster.behavior === "Skulker" && state.turn % 2 === 0) continue;
+    const step = stepToward(monster.x, monster.y, state.dungeon.player.x, state.dungeon.player.y);
+    if (!step) continue;
+    const occupied = monsterAt(step.x, step.y);
+    const terrain = getTile(state.dungeon.tiles, step.x, step.y).terrain;
+    if (!occupied && terrain !== "wall" && terrain !== "door") {
+      monster.x = step.x;
+      monster.y = step.y;
+    }
+  }
+}
+
+function monsterAttack(monster) {
+  const roll = rollD6() + monster.attack;
+  const defense = 8 + state.hero.defense + (state.wardTurns > 0 ? 3 : 0);
+  if (roll >= defense) {
+    const damage = Math.max(1, monster.attack + rollD3() - state.hero.defense);
+    state.hero.hp = Math.max(0, state.hero.hp - damage);
+    addLog(`Roll ${roll} vs ${defense}: ${monster.name} hits for ${damage}.`);
+  } else {
+    addLog(`Roll ${roll} vs ${defense}: ${monster.name} misses.`);
+  }
+}
+
+function stepToward(x, y, tx, ty) {
+  const options = [
+    { x: x + Math.sign(tx - x), y },
+    { x, y: y + Math.sign(ty - y) }
+  ].filter((step) => step.x !== x || step.y !== y);
+  return options[0] || null;
+}
+
+function monsterAt(x, y) {
+  return state.dungeon?.monsters.find((monster) => monster.x === x && monster.y === y && monster.hp > 0) || null;
+}
+
+function selectSpell(spellId) {
+  if (!SPELLS[spellId]) return;
+  if (state.activeSpell === spellId) {
+    state.activeSpell = null;
+    addLog("Lowered spell hand.");
+  } else {
+    state.activeSpell = spellId;
+    addLog(`${SPELLS[spellId].name} readied.`);
+  }
+  render();
+}
+
+function castSpellAt(tile) {
+  const spell = SPELLS[state.activeSpell];
+  if (!spell) return;
+  if (state.hero.mana < spell.cost) {
+    addLog(`Not enough mana for ${spell.name}.`);
+    state.activeSpell = null;
+    render();
+    return;
+  }
+
+  const monster = monsterAt(tile.x, tile.y);
+  if (state.activeSpell === "spark") {
+    if (!monster) {
+      addLog("Spark needs a visible monster.");
+    } else {
+      state.hero.mana -= spell.cost;
+      const damage = 6 + rollD3();
+      monster.hp -= damage;
+      addLog(`Roll: Spark burns ${monster.name} for ${damage}.`);
+      if (monster.hp <= 0) defeatMonster(monster);
+      advanceTurn("The air smells of hot glass.");
+    }
+  } else if (state.activeSpell === "glassbind") {
+    if (!monster) {
+      addLog("Glassbind needs a visible monster.");
+    } else {
+      state.hero.mana -= spell.cost;
+      monster.rooted = 3;
+      advanceTurn(`Roll: ${monster.name} is bound in glass for 3 turns.`);
+    }
+  }
+  state.activeSpell = null;
+  render();
+}
+
+function castSelfSpell(spellId) {
+  const spell = SPELLS[spellId];
+  if (state.hero.mana < spell.cost) {
+    addLog(`Not enough mana for ${spell.name}.`);
+    render();
+    return;
+  }
+  state.hero.mana -= spell.cost;
+  if (spellId === "mend") {
+    const amount = 8 + rollD3();
+    state.hero.hp = Math.min(state.hero.maxHp, state.hero.hp + amount);
+    advanceTurn(`Roll: Mend restores ${amount} health.`);
+  }
+  if (spellId === "ward") {
+    state.wardTurns = 6;
+    advanceTurn("Roll: Ward raises your defense for 6 turns.");
+  }
+  if (spellId === "reveal") {
+    for (const tile of state.dungeon.tiles) {
+      const distance = Math.abs(tile.x - state.dungeon.player.x) + Math.abs(tile.y - state.dungeon.player.y);
+      if (distance <= 8) tile.explored = true;
+    }
+    advanceTurn("Roll: Reveal sketches nearby halls into memory.");
+  }
+  if (spellId === "blink") {
+    state.dungeon.player = { x: 4, y: 4 };
+    advanceTurn("Roll: Blink snaps you back to the entry stones.");
+  }
+}
+
+function collectTreasure(tile) {
+  const item = `${LOOT_MODIFIERS[(state.turn + tile.x) % LOOT_MODIFIERS.length]} ${LOOT_BASES[(state.turn + tile.y) % LOOT_BASES.length]}`;
+  tile.terrain = "floor";
+  if (state.hero.pack.length >= state.hero.packLimit) {
+    addLog(`Found ${item}, but the Pack is full.`);
+  } else {
+    state.hero.pack.push(item);
+    addLog(`Found ${item}.`);
+  }
+  advanceTurn("The cache is empty now.");
+}
+
+function useSupply() {
+  const index = state.hero.pack.indexOf("Field Supply");
+  if (index === -1) {
+    addLog("No Field Supply remains.");
+    render();
+    return;
+  }
+  state.hero.pack.splice(index, 1);
+  state.hero.hp = Math.min(state.hero.maxHp, state.hero.hp + 6);
+  addLog("Used Field Supply for 6 health.");
+  render();
+}
+
+function rollD6() {
+  return Math.floor(Math.random() * 6) + 1;
+}
+
+function rollD3() {
+  return Math.floor(Math.random() * 3) + 1;
 }
 
 function updateVisibility() {
@@ -447,6 +711,8 @@ function describeTile(tile) {
     trap: "suspicious floor",
     treasure: "glinting cache"
   }[tile.terrain] || tile.terrain;
+  const monster = monsterAt(tile.x, tile.y);
+  if (monster) return `Inspected Tile ${tile.x},${tile.y}: ${monster.name} (${monster.behavior}) ${monster.hp}/${monster.maxHp} HP.`;
   return `Inspected Tile ${tile.x},${tile.y}: ${name}.`;
 }
 
@@ -459,6 +725,7 @@ function render() {
   renderHero();
   renderPaperDoll();
   renderPack();
+  renderSpells();
   renderDungeon();
   renderLog();
 }
@@ -471,10 +738,11 @@ function renderDungeon() {
 
   ui.dungeonView.innerHTML = state.dungeon.tiles.map((tile, index) => {
     const occupied = tile.x === state.dungeon.player.x && tile.y === state.dungeon.player.y;
+    const monster = monsterAt(tile.x, tile.y);
     const fog = tile.visible ? "visible" : tile.explored ? "explored" : "unseen";
     const label = occupied ? "Adventurer" : fog === "unseen" ? "Unseen Tile" : describeTile(tile);
-    const glyph = occupied ? "@" : tileGlyph(tile, fog);
-    return `<button type="button" class="tile ${fog} terrain-${tile.terrain} ${occupied ? "player" : ""}" data-tile-index="${index}" aria-label="${label}">${glyph}</button>`;
+    const glyph = occupied ? "@" : monster && fog === "visible" ? monster.glyph : tileGlyph(tile, fog);
+    return `<button type="button" class="tile ${fog} terrain-${tile.terrain} ${occupied ? "player" : ""} ${monster && fog === "visible" ? "monster" : ""}" data-tile-index="${index}" aria-label="${label}">${glyph}</button>`;
   }).join("");
 }
 
@@ -519,8 +787,17 @@ function renderPaperDoll() {
 function renderPack() {
   ui.packCount.textContent = `${state.hero.pack.length}/${state.hero.packLimit}`;
   ui.packList.innerHTML = state.hero.pack.length
-    ? state.hero.pack.map((item) => `<li>${item}</li>`).join("")
+    ? state.hero.pack.map((item) => `<li>${item}${item === "Field Supply" ? ' <button type="button" data-action="use-supply">Use</button>' : ""}</li>`).join("")
     : "<li>Empty</li>";
+}
+
+function renderSpells() {
+  ui.spellList.innerHTML = Object.entries(SPELLS).map(([spellId, spell]) => {
+    const disabled = state.mode !== "dungeon" || state.hero.mana < spell.cost ? "disabled" : "";
+    const active = state.activeSpell === spellId ? " active" : "";
+    const action = ["mend", "ward", "reveal", "blink"].includes(spellId) ? `onclick="castSelfSpell('${spellId}')"` : `data-action="select-spell" data-spell-id="${spellId}"`;
+    return `<button type="button" class="spell-button${active}" ${action} ${disabled}><strong>${spell.name}</strong><span>${spell.cost} mana · ${spell.summary}</span></button>`;
+  }).join("");
 }
 
 function renderLog() {
