@@ -1,5 +1,9 @@
 # Windglass Keep
 
+## Play online
+
+[Play Windglass Keep](https://intrepion.github.io/kata-castle-of-the-winds-clone-codex-openai-gpt-5.5-light/) — free, playable in your browser.
+
 Windglass Keep is an original, offline-friendly browser dungeon crawler inspired by the interaction grammar of Castle of the Winds: a mouse-first desktop RPG shell, turn-based dungeon exploration, visible combat math, loot, spells, a safe Town hub, and browser-local Save Slots.
 
 The implementation target is deliberately small and static: `index.html`, `styles.css`, and `game.js` should be enough to play the game directly or through a tiny local server.
