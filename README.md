@@ -66,3 +66,7 @@ MVP completion requires browser evidence, not just syntax checks:
 9. Confirm the browser console has no application errors.
 
 After verification passes, the playable MVP should be committed and pushed in one implementation commit, followed by local and remote SHA alignment checks.
+
+## Arcade metadata
+
+See [docs/arcade-metadata.md](docs/arcade-metadata.md) for the game-owned manifest and screenshot provenance.
