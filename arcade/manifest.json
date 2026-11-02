@@ -1,6 +1,47 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "gameId": "kata-castle-of-the-winds-clone-codex-openai-gpt-5.5-light",
   "playUrl": "https://intrepion.github.io/kata-castle-of-the-winds-clone-codex-openai-gpt-5.5-light/",
-  "screenshots": []
+  "screenshots": [
+    {
+      "path": "arcade/screenshots/ci-20261102-01.jpg",
+      "sha256": "3b274ddb673cd3e2b95efa8d92cf8a87727114abbe699896cd70e6384fbc1731",
+      "alt": "Windglass Keep gameplay, view 1",
+      "provenance": {
+        "kind": "ci_gameplay_capture",
+        "sourcePath": "arcade/capture-evidence/ci-20261102-01.png",
+        "sourceSha256": "bdae10fadaf5251ffbad1c6c45bb8142ee72d45e5a6b3430efbe89e5af058395",
+        "captureCommit": "245f50e23bffe8f681186abda0f70bcf6dc62c36",
+        "workflowRunId": "41398152320",
+        "inputHashes": {
+          "index.html": "f496f4c9529df5357c373fb0eafad6f09182376a3e5e08aabb71d95001bfa79e",
+          "styles.css": "c584a6b0cd8dfe41f81019ad115044ebd9000c9121b66c6e51f3acbb7ed0d886",
+          "game.js": "e8aa58abbf7847f3403c33d30e3b668ed10494d2c0ef38315370bd38115f7547"
+        },
+        "publishedFilesVerifiedAt": "2026-11-02T19:01:20Z",
+        "captureRecordPath": "arcade/capture-evidence/ci-20261102-record.json",
+        "captureRecordSha256": "0faef82c554ca534537fb0b697fc25911f07414d8e872ade85841118dd8ae2cb"
+      }
+    },
+    {
+      "path": "arcade/screenshots/ci-20261102-02.jpg",
+      "sha256": "68091698f8d73acd00b4d5e723778114156ab33ececf9e4cf7debdf8a29dc5fa",
+      "alt": "Windglass Keep gameplay, view 2",
+      "provenance": {
+        "kind": "ci_gameplay_capture",
+        "sourcePath": "arcade/capture-evidence/ci-20261102-02.png",
+        "sourceSha256": "f1eea775e544c6762e04d640e7fb849ebd42ac213c5822ec07862f4d29415e5b",
+        "captureCommit": "245f50e23bffe8f681186abda0f70bcf6dc62c36",
+        "workflowRunId": "41398152320",
+        "inputHashes": {
+          "index.html": "f496f4c9529df5357c373fb0eafad6f09182376a3e5e08aabb71d95001bfa79e",
+          "styles.css": "c584a6b0cd8dfe41f81019ad115044ebd9000c9121b66c6e51f3acbb7ed0d886",
+          "game.js": "e8aa58abbf7847f3403c33d30e3b668ed10494d2c0ef38315370bd38115f7547"
+        },
+        "publishedFilesVerifiedAt": "2026-11-02T19:01:20Z",
+        "captureRecordPath": "arcade/capture-evidence/ci-20261102-record.json",
+        "captureRecordSha256": "0faef82c554ca534537fb0b697fc25911f07414d8e872ade85841118dd8ae2cb"
+      }
+    }
+  ]
 }
